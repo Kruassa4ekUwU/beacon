@@ -1,0 +1,9 @@
+{
+  "name": "Бекон",
+  "short_name": "Бекон",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EAE4D3",
+  "theme_color": "#22252A",
+  "orientation": "portrait"
+}
