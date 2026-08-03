@@ -1,0 +1,14 @@
+{
+  "name": "capacitor-app-extractor",
+  "version": "1.0.0",
+  "description": "List installed Android apps and extract their APK so Beacon can send them like SHAREit",
+  "files": ["android"],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^6.0.0"
+  }
+}
