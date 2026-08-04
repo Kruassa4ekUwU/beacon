@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="ru" id="htmlRoot">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title id="pageTitle">Бекон — передача файлов между устройствами</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#22252A">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+  :root{
+    --paper:#EAE4D3;
+    --panel:#DFD7C0;
+    --ink:#22252A;
+    --ink-soft:#5B5A52;
+    --transmit:#C1673A;
+    --receive:#3B6E5E;
+    --alert:#B23A34;
+    --line: rgba(34,37,42,0.16);
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Space Mono", Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", "IBM Plex Sans", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 10%, rgba(193,103,58,0.06), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(59,110,94,0.06), transparent 40%),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    max-width:520px;
+    margin:0 auto;
+    padding:28px 20px 60px;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:14px;
+    margin-bottom:26px;
+    gap:10px;
+  }
+  .brand{
+    font-family:var(--mono);
+    font-size:15px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    font-weight:700;
+  }
+  .brand span:last-child{color:var(--transmit);}
+  .header-right{ display:flex; align-items:center; gap:8px; }
+  .status-chip{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:4px 9px;
+    border-radius:2px;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+  }
+  .status-chip.on{ border-color:var(--receive); color:var(--receive); }
+  .status-chip.off{ border-color:var(--alert); color:var(--alert); }
+  .lang-toggle{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.08em;
+    padding:4px 9px;
+    border-radius:2px;
+    border:1px solid var(--line);
+    color:var(--ink);
+    background:transparent;
+    cursor:pointer;
+  }
+  .lang-toggle:active{ transform:translateY(1px); }
+
+  .dial{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:26px 22px;
+    margin-bottom:18px;
+    position:relative;
+  }
+  .dial::before{
+    content:"";
+    position:absolute;
+    top:0; left:22px; right:22px;
+    height:1px;
+    background:repeating-linear-gradient(90deg, var(--ink) 0, var(--ink) 1px, transparent 1px, transparent 9px);
+    opacity:0.25;
+  }
+  .dial-label{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:10px;
+  }
+  .code{
+    font-family:var(--mono);
+    font-size:56px;
+    font-weight:700;
+    letter-spacing:0.12em;
+    line-height:1;
+    color:var(--ink);
+    word-break:break-all;
+  }
+  .code.pending{ color:var(--ink-soft); font-size:22px; letter-spacing:0.06em; }
+  .dial-sub{
+    margin-top:10px;
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+
+  .tabs{
+    display:flex;
+    gap:2px;
+    margin-bottom:18px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    padding:11px 8px;
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    background:transparent;
+    border:none;
+    cursor:pointer;
+    color:var(--ink-soft);
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab.active{ background:var(--ink); color:var(--paper); }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:20px 22px;
+    margin-bottom:16px;
+  }
+  .panel h3{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:0 0 12px;
+    font-weight:600;
+  }
+
+  input[type="text"]{
+    width:100%;
+    font-family:var(--mono);
+    font-size:20px;
+    letter-spacing:0.1em;
+    padding:12px 14px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:3px;
+    color:var(--ink);
+    text-transform:uppercase;
+  }
+  input[type="text"]:focus{ outline:2px solid var(--transmit); outline-offset:1px; }
+
+  button{
+    font-family:var(--sans);
+    font-weight:600;
+    font-size:14px;
+    border:none;
+    border-radius:3px;
+    padding:12px 18px;
+    cursor:pointer;
+    transition:transform .08s ease, opacity .15s ease;
+  }
+  button:active{ transform:translateY(1px); }
+  button:disabled{ opacity:0.4; cursor:not-allowed; }
+  .btn-primary{ background:var(--transmit); color:#FAF7EF; width:100%; margin-top:10px; }
+  .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); }
+
+  .qr-box{
+    display:flex;
+    justify-content:center;
+    margin-top:10px;
+    padding:12px;
+    background:#FAF7EF;
+    border:1px solid var(--line);
+    border-radius:3px;
+    min-height:0;
+  }
+  .qr-box:empty{ display:none; }
+  .qr-box img, .qr-box canvas{ image-rendering:pixelated; }
+
+  .scanner-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(20,22,26,0.96);
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .scanner-box{
+    position:relative;
+    width:min(320px, 85vw);
+    height:min(320px, 85vw);
+    border-radius:6px;
+    overflow:hidden;
+    background:#000;
+  }
+  .scanner-box video{ width:100%; height:100%; object-fit:cover; }
+  .scanner-frame{
+    position:absolute; inset:14%;
+    border:2px solid var(--transmit);
+    border-radius:8px;
+    pointer-events:none;
+  }
+  #scannerCancelBtn{ color:var(--paper); border-color:rgba(234,228,211,0.35); }
+
+  .mono-box{
+    width:100%;
+    height:64px;
+    font-family:var(--mono);
+    font-size:10.5px;
+    line-height:1.4;
+    margin-top:6px;
+    padding:8px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:3px;
+    color:var(--ink);
+    resize:vertical;
+  }
+  .mode-btn-active{ background:var(--ink) !important; color:var(--paper) !important; border-color:var(--ink) !important; }
+
+  .dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:4px;
+    padding:30px 16px;
+    text-align:center;
+    color:var(--ink-soft);
+    font-size:13px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{ border-color:var(--transmit); background:rgba(193,103,58,0.06); color:var(--ink); }
+  .dropzone strong{ color:var(--ink); }
+
+  .queue{ margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+  .item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:9px 12px;
+  }
+  .item .meta{ min-width:0; }
+  .item .fname{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; }
+  .item .fsize{ font-family:var(--mono); font-size:11px; color:var(--ink-soft); }
+  .signal-pulse{
+    width:9px; height:9px; border-radius:50%; background:var(--transmit); flex-shrink:0;
+    animation:pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:0.35; transform:scale(0.7);} }
+  .check{ color:var(--receive); font-weight:700; font-size:14px; flex-shrink:0; }
+  .dl-link{ font-family:var(--mono); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--receive); text-decoration:none; border-bottom:1px solid var(--receive); flex-shrink:0; }
+
+  .log{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:16px;
+    line-height:1.7;
+  }
+  .log div span{ color:var(--ink); }
+
+  @media (prefers-reduced-motion: reduce){
+    .signal-pulse{ animation:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand"><span id="brandFirst">БЕ</span><span id="brandLast">КОН</span></div>
+    <div class="header-right">
+      <button class="lang-toggle" id="langToggle">EN</button>
+      <div class="status-chip off" id="statusChip">—</div>
+    </div>
+  </header>
+
+  <div class="dial">
+    <div class="dial-label" id="yourCodeLabel">Твой код</div>
+    <div class="code pending" id="myCode">настройка…</div>
+    <div class="dial-sub" id="dialSub"></div>
+    <button class="btn-ghost" id="retryBtn" style="margin-top:12px; width:100%; display:none;"></button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tabConnect"></button>
+    <button class="tab" id="tabSend"></button>
+    <button class="tab" id="tabApps"></button>
+  </div>
+
+  <div class="panel" id="panelConnect">
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button class="btn-ghost" id="modeServerBtn" style="flex:1;"></button>
+      <button class="btn-ghost" id="modeLocalBtn" style="flex:1;"></button>
+    </div>
+
+    <div id="serverModeBox">
+      <h3 id="connectTitle"></h3>
+      <input type="text" id="peerCodeInput" placeholder="XXXX" maxlength="4" autocomplete="off" autocapitalize="characters">
+      <button class="btn-primary" id="connectBtn"></button>
+      <div class="dial-sub" id="connectStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div id="localModeBox" style="display:none;">
+      <div class="dial-sub" id="localIntro" style="margin-bottom:14px;"></div>
+
+      <div style="display:flex; gap:8px;">
+        <button class="btn-primary" id="localCreateBtn" style="margin-top:0; flex:1;"></button>
+        <button class="btn-ghost" id="localJoinToggleBtn" style="flex:1;"></button>
+      </div>
+
+      <div id="localCreateBox" style="display:none; margin-top:14px;">
+        <div class="dial-sub" id="sendThisLabel1"></div>
+        <textarea id="localOfferOut" readonly class="mono-box"></textarea>
+        <div id="localOfferQR" class="qr-box"></div>
+        <button class="btn-ghost" id="copyOfferBtn" style="margin-top:6px; width:100%;"></button>
+        <div class="dial-sub" id="pasteAnswerLabel" style="margin-top:14px;"></div>
+        <textarea id="localAnswerIn" class="mono-box"></textarea>
+        <button class="btn-ghost" id="scanAnswerBtn" style="margin-top:6px; width:100%;"></button>
+        <button class="btn-primary" id="localFinishBtn"></button>
+      </div>
+
+      <div id="localJoinBox" style="display:none; margin-top:14px;">
+        <div class="dial-sub" id="pasteCodeLabel"></div>
+        <textarea id="localOfferIn" class="mono-box"></textarea>
+        <button class="btn-ghost" id="scanOfferBtn" style="margin-top:6px; width:100%;"></button>
+        <button class="btn-primary" id="localMakeAnswerBtn"></button>
+        <div id="localAnswerOutBox" style="display:none; margin-top:14px;">
+          <div class="dial-sub" id="sendThisLabel2"></div>
+          <textarea id="localAnswerOut" readonly class="mono-box"></textarea>
+          <div id="localAnswerQR" class="qr-box"></div>
+          <button class="btn-ghost" id="copyAnswerBtn" style="margin-top:6px; width:100%;"></button>
+        </div>
+      </div>
+
+      <div class="dial-sub" id="localStatus" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panelSend" style="display:none;">
+    <h3 id="sendTitle"></h3>
+    <div class="dropzone" id="dropzone">
+      <strong id="dropStrong"></strong><br><span id="dropOr"></span>
+      <input type="file" id="fileInput" multiple style="display:none;">
+    </div>
+    <div class="queue" id="sendQueue"></div>
+  </div>
+
+  <div class="panel" id="panelApps" style="display:none;">
+    <h3 id="appsTitle"></h3>
+    <div class="dial-sub" id="appsHint"></div>
+    <button class="btn-ghost" id="refreshAppsBtn" style="margin-top:10px; width:100%; display:none;"></button>
+    <div class="queue" id="appsQueue"></div>
+  </div>
+
+  <div class="panel">
+    <h3 id="receivedTitle"></h3>
+    <div class="queue" id="recvQueue">
+      <div class="dial-sub" id="recvEmpty"></div>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div id="scannerOverlay" class="scanner-overlay" style="display:none;">
+    <div class="scanner-box">
+      <video id="scannerVideo" playsinline autoplay muted></video>
+      <div class="scanner-frame"></div>
+    </div>
+    <div class="dial-sub" id="scannerHint" style="color:#EAE4D3;"></div>
+    <button class="btn-ghost" id="scannerCancelBtn" style="margin-top:16px;"></button>
+  </div>
+
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  const STR = {
+    ru: {
+      title: 'Бекон — передача файлов между устройствами',
+      brandFirst: 'БЕ', brandLast: 'КОН',
+      offline: 'не в сети', online: 'на связи',
+      yourCode: 'Твой код',
+      settingUp: 'настройка…',
+      errorCode: 'ошибка',
+      errorCodeSub: 'Не удалось получить код. Обнови страницу.',
+      retrying: (n, max) => 'Не получилось подключиться к серверу, пробую снова (' + n + '/' + max + ')…',
+      retryFailedSub: 'Не получилось подключиться к серверу связи. Проверь интернет и нажми «Повторить».',
+      retryBtn: 'Повторить',
+      modeServer: 'Через сервер',
+      modeLocal: 'Локально',
+      localIntro: 'Оба устройства — в одной Wi-Fi сети. Один создаёт точку, служебный код нужно передать вторым любым способом (сообщением и т.п.) — это не сам файл, просто разовая метка для соединения.',
+      localCreateBtn: 'Создать точку',
+      localJoinBtn: 'У меня есть код',
+      sendThis: 'Отправь это второму устройству:',
+      copyBtn: 'Скопировать',
+      copiedBtn: 'Скопировано',
+      pasteAnswer: 'Вставь ответ от второго устройства:',
+      finishConnectBtn: 'Подключить',
+      pasteCode: 'Вставь код, который тебе прислали:',
+      makeAnswerBtn: 'Создать ответ',
+      sendBack: 'Отправь это обратно первому устройству:',
+      localGathering: 'Готовлю соединение…',
+      localConnecting: 'Соединяюсь напрямую…',
+      localConnected: 'Подключено напрямую, без сервера!',
+      localError: 'Не получилось подключиться. Проверь код и попробуй снова.',
+      scanBtn: 'Сканировать QR камерой',
+      qrTooLong: 'Код слишком длинный для QR — просто скопируй текстом.',
+      scannerHint: 'Наведи камеру на QR-код',
+      cancelBtn: 'Отмена',
+      scanNotFound: 'Не нашёл QR-код в кадре, попробуй снова.',
+      dialSubDefault: 'Дай этот код второму устройству, чтобы оно подключилось.',
+      dialSubActive: 'Код активен. Жду подключения — или подключись сам во вкладке «Подключиться».',
+      tabConnect: 'Подключиться', tabSend: 'Передать', tabApps: 'Приложения',
+      connectTitle: 'Ввести код другого устройства',
+      connectBtn: 'Соединить',
+      connectNeedCode: 'Введи 4-значный код.',
+      connectConnecting: 'Соединяюсь…',
+      connectNoSuchCode: 'Такого кода нет в сети. Проверь и попробуй снова.',
+      connectSuccess: 'Подключено! Перейди на вкладку «Передать», чтобы отправить файлы.',
+      sendTitle: 'Отправить файлы',
+      dropStrong: 'Перетащи файлы сюда',
+      dropOr: 'или нажми, чтобы выбрать',
+      appsTitle: 'Установленные приложения',
+      appsOnlyAndroid: 'Доступно только в Android-версии Бекона.',
+      appsHintReady: 'Нажми «Обновить список», чтобы увидеть установленные приложения.',
+      appsLoading: 'Загружаю список…',
+      appsFound: n => n + ' приложений найдено.',
+      appsError: 'Не удалось получить список приложений.',
+      appsRefresh: 'Обновить список',
+      appSend: 'Отправить',
+      receivedTitle: 'Принятые файлы',
+      receivedEmpty: 'Пока ничего не пришло.',
+      download: 'Скачать',
+      textKind: 'Текст',
+      connectFirst: 'Сначала подключись ко второму устройству (вкладка «Подключиться»).',
+      logYourCode: code => 'Твой код: <span>'+code+'</span>',
+      logIncomingAccepted: 'Входящее соединение принято.',
+      logError: t => 'Ошибка: '+t,
+      logConnEstablished: 'Соединение установлено.',
+      logConnClosed: 'Соединение разорвано.',
+      logConnError: e => 'Ошибка соединения: '+e,
+      logFileReceived: name => 'Получен файл: <span>'+name+'</span>',
+      logTextReceived: 'Получено текстовое сообщение.',
+      logAppsListError: msg => 'Ошибка списка приложений: '+msg,
+      logAppSent: name => 'Отправлено приложение: <span>'+name+'</span>',
+      logAppSendError: (name,msg) => 'Не удалось отправить '+name+': '+msg,
+      logFileSent: name => 'Отправлен файл: <span>'+name+'</span>',
+      sendingBtn: '...',
+      errBtn: 'Ошибка',
+      locale: 'ru-RU'
+    },
+    en: {
+      title: 'Bacon — file transfer between devices',
+      brandFirst: 'BA', brandLast: 'CON',
+      offline: 'offline', online: 'connected',
+      yourCode: 'Your code',
+      settingUp: 'setting up…',
+      errorCode: 'error',
+      errorCodeSub: "Couldn't get a code. Refresh the page.",
+      retrying: (n, max) => "Couldn't reach the connection server, retrying (" + n + '/' + max + ')…',
+      retryFailedSub: "Couldn't reach the connection server. Check your internet and tap \"Retry\".",
+      retryBtn: 'Retry',
+      modeServer: 'Via server',
+      modeLocal: 'Local',
+      localIntro: "Both devices need to be on the same Wi-Fi. One creates a connection point; send the setup code to the other device any way you like (a message, etc.) — it's not the file itself, just a one-time connection tag.",
+      localCreateBtn: 'Create',
+      localJoinBtn: 'I have a code',
+      sendThis: 'Send this to the other device:',
+      copyBtn: 'Copy',
+      copiedBtn: 'Copied',
+      pasteAnswer: "Paste the other device's answer:",
+      finishConnectBtn: 'Connect',
+      pasteCode: 'Paste the code you were sent:',
+      makeAnswerBtn: 'Create answer',
+      sendBack: 'Send this back to the first device:',
+      localGathering: 'Preparing the connection…',
+      localConnecting: 'Connecting directly…',
+      localConnected: 'Connected directly, no server needed!',
+      localError: "Couldn't connect. Check the code and try again.",
+      scanBtn: 'Scan QR with camera',
+      qrTooLong: "Code is too long for a QR — just copy the text instead.",
+      scannerHint: 'Point the camera at the QR code',
+      cancelBtn: 'Cancel',
+      scanNotFound: "Couldn't find a QR code in frame, try again.",
+      dialSubDefault: 'Give this code to the other device so it can connect.',
+      dialSubActive: 'Code is live. Waiting for a connection — or connect yourself on the "Connect" tab.',
+      tabConnect: 'Connect', tabSend: 'Send', tabApps: 'Apps',
+      connectTitle: "Enter the other device's code",
+      connectBtn: 'Connect',
+      connectNeedCode: 'Enter a 4-character code.',
+      connectConnecting: 'Connecting…',
+      connectNoSuchCode: "That code isn't online. Check it and try again.",
+      connectSuccess: 'Connected! Go to the "Send" tab to send files.',
+      sendTitle: 'Send files',
+      dropStrong: 'Drop files here',
+      dropOr: 'or tap to choose',
+      appsTitle: 'Installed apps',
+      appsOnlyAndroid: 'Only available in the Android version of Bacon.',
+      appsHintReady: 'Tap "Refresh list" to see installed apps.',
+      appsLoading: 'Loading list…',
+      appsFound: n => n + ' apps found.',
+      appsError: "Couldn't load the list of apps.",
+      appsRefresh: 'Refresh list',
+      appSend: 'Send',
+      receivedTitle: 'Received files',
+      receivedEmpty: 'Nothing received yet.',
+      download: 'Download',
+      textKind: 'Text',
+      connectFirst: 'Connect to the other device first (the "Connect" tab).',
+      logYourCode: code => 'Your code: <span>'+code+'</span>',
+      logIncomingAccepted: 'Incoming connection accepted.',
+      logError: t => 'Error: '+t,
+      logConnEstablished: 'Connection established.',
+      logConnClosed: 'Connection closed.',
+      logConnError: e => 'Connection error: '+e,
+      logFileReceived: name => 'File received: <span>'+name+'</span>',
+      logTextReceived: 'Text message received.',
+      logAppsListError: msg => 'App list error: '+msg,
+      logAppSent: name => 'App sent: <span>'+name+'</span>',
+      logAppSendError: (name,msg) => 'Failed to send '+name+': '+msg,
+      logFileSent: name => 'File sent: <span>'+name+'</span>',
+      sendingBtn: '...',
+      errBtn: 'Error',
+      locale: 'en-US'
+    }
+  };
+
+  let LANG = (navigator.language || '').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+  function t(){ return STR[LANG]; }
+
+  // Live state, needed so applyLanguage() can re-render the *current*
+  // contextual message rather than always resetting to a default one.
+  let state = {
+    codeReady: false,
+    code: null,
+    connected: false,
+    connectStatusKind: null // 'needCode' | 'connecting' | 'noSuchCode' | 'success' | null
+  };
+
+  const myCodeEl = $('myCode');
+  const dialSub = $('dialSub');
+  const statusChip = $('statusChip');
+  const connectStatus = $('connectStatus');
+  const logEl = $('log');
+  const sendQueue = $('sendQueue');
+  const recvQueue = $('recvQueue');
+  const recvEmpty = $('recvEmpty');
+  const dropzone = $('dropzone');
+  const fileInput = $('fileInput');
+  const peerCodeInput = $('peerCodeInput');
+
+  let peer = null;
+  let conn = null;
+  const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const retryBtn = $('retryBtn');
+  retryBtn.onclick = () => {
+    networkRetries = 0;
+    retryBtn.style.display = 'none';
+    myCodeEl.textContent = t().settingUp;
+    initPeer(0);
+  };
+
+  function applyLanguage(){
+    const s = t();
+    document.documentElement.lang = LANG;
+    $('pageTitle').textContent = s.title;
+    document.title = s.title;
+    $('brandFirst').textContent = s.brandFirst;
+    $('brandLast').textContent = s.brandLast;
+    $('langToggle').textContent = LANG === 'ru' ? 'EN' : 'RU';
+    $('yourCodeLabel').textContent = s.yourCode;
+    $('tabConnect').textContent = s.tabConnect;
+    $('tabSend').textContent = s.tabSend;
+    $('tabApps').textContent = s.tabApps;
+    $('connectTitle').textContent = s.connectTitle;
+    $('connectBtn').textContent = s.connectBtn;
+    $('sendTitle').textContent = s.sendTitle;
+    $('dropStrong').textContent = s.dropStrong;
+    $('dropOr').textContent = s.dropOr;
+    $('appsTitle').textContent = s.appsTitle;
+    $('refreshAppsBtn').textContent = s.appsRefresh;
+    $('receivedTitle').textContent = s.receivedTitle;
+    $('retryBtn').textContent = s.retryBtn;
+    $('modeServerBtn').textContent = s.modeServer;
+    $('modeLocalBtn').textContent = s.modeLocal;
+    $('localIntro').textContent = s.localIntro;
+    $('localCreateBtn').textContent = s.localCreateBtn;
+    $('localJoinToggleBtn').textContent = s.localJoinBtn;
+    $('sendThisLabel1').textContent = s.sendThis;
+    $('sendThisLabel2').textContent = s.sendThis;
+    $('copyOfferBtn').textContent = s.copyBtn;
+    $('copyAnswerBtn').textContent = s.copyBtn;
+    $('pasteAnswerLabel').textContent = s.pasteAnswer;
+    $('localFinishBtn').textContent = s.finishConnectBtn;
+    $('pasteCodeLabel').textContent = s.pasteCode;
+    $('localMakeAnswerBtn').textContent = s.makeAnswerBtn;
+    $('scanAnswerBtn').textContent = s.scanBtn;
+    $('scanOfferBtn').textContent = s.scanBtn;
+    $('scannerHint').textContent = s.scannerHint;
+    $('scannerCancelBtn').textContent = s.cancelBtn;
+
+    statusChip.textContent = state.connected ? s.online : s.offline;
+
+    if(state.codeReady){
+      myCodeEl.textContent = state.code;
+      dialSub.textContent = s.dialSubActive;
+    } else {
+      myCodeEl.textContent = s.settingUp;
+      dialSub.textContent = s.dialSubDefault;
+    }
+
+    if(state.connectStatusKind === 'needCode') connectStatus.textContent = s.connectNeedCode;
+    else if(state.connectStatusKind === 'connecting') connectStatus.textContent = s.connectConnecting;
+    else if(state.connectStatusKind === 'noSuchCode') connectStatus.textContent = s.connectNoSuchCode;
+    else if(state.connectStatusKind === 'success') connectStatus.textContent = s.connectSuccess;
+
+    if(recvQueue.children.length <= 1) recvEmpty.textContent = s.receivedEmpty;
+
+    if(isNative){
+      appsHint.textContent = appsLoaded ? s.appsFound(lastAppsCount) : s.appsHintReady;
+    } else {
+      appsHint.textContent = s.appsOnlyAndroid;
+    }
+  }
+
+  $('langToggle').onclick = () => {
+    LANG = (LANG === 'ru') ? 'en' : 'ru';
+    applyLanguage();
+  };
+
+  function log(msg){
+    const d = document.createElement('div');
+    const now = new Date().toLocaleTimeString(t().locale,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    d.innerHTML = '<span>'+now+'</span> — '+msg;
+    logEl.prepend(d);
+  }
+
+  function randomCode(){
+    let s='';
+    for(let i=0;i<4;i++) s += CHARS[Math.floor(Math.random()*CHARS.length)];
+    return s;
+  }
+
+  function setStatus(connected){
+    state.connected = connected;
+    statusChip.textContent = connected ? t().online : t().offline;
+    statusChip.className = 'status-chip ' + (connected ? 'on' : 'off');
+  }
+
+  let networkRetries = 0;
+  const MAX_NETWORK_RETRIES = 5;
+
+  function initPeer(attempt){
+    attempt = attempt || 0;
+    if(attempt > 8){
+      myCodeEl.textContent = t().errorCode;
+      dialSub.textContent = t().errorCodeSub;
+      return;
+    }
+    const code = randomCode();
+    if(peer) peer.destroy();
+    // Explicit host/port/secure so WebView can't misdetect the protocol
+    // (avoids odd auto-detection issues seen in some embedded WebViews).
+    peer = new Peer('bacon-'+code, {
+      host: '0.peerjs.com',
+      port: 443,
+      path: '/',
+      secure: true,
+      debug: 0
+    });
+
+    peer.on('open', id => {
+      networkRetries = 0;
+      retryBtn.style.display = 'none';
+      state.codeReady = true;
+      state.code = code;
+      myCodeEl.textContent = code;
+      myCodeEl.classList.remove('pending');
+      dialSub.textContent = t().dialSubActive;
+      log(t().logYourCode(code));
+    });
+
+    peer.on('connection', c => {
+      setupConnection(c);
+      log(t().logIncomingAccepted);
+    });
+
+    peer.on('error', err => {
+      if(err.type === 'unavailable-id'){
+        initPeer(attempt+1);
+      } else if (err.type === 'peer-unavailable'){
+        state.connectStatusKind = 'noSuchCode';
+        connectStatus.textContent = t().connectNoSuchCode;
+        connectStatus.style.color = 'var(--alert)';
+      } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed'){
+        log(t().logError(err.type));
+        if(networkRetries < MAX_NETWORK_RETRIES){
+          networkRetries++;
+          dialSub.textContent = t().retrying(networkRetries, MAX_NETWORK_RETRIES);
+          setTimeout(() => initPeer(0), networkRetries * 1500);
+        } else {
+          myCodeEl.textContent = t().errorCode;
+          dialSub.textContent = t().retryFailedSub;
+          retryBtn.style.display = 'block';
+        }
+      } else {
+        log(t().logError(err.type));
+      }
+    });
+
+    peer.on('disconnected', () => {
+      setStatus(false);
+    });
+  }
+
+  function setupConnection(c){
+    conn = c;
+    conn.on('open', () => {
+      setStatus(true);
+      state.connectStatusKind = 'success';
+      connectStatus.textContent = t().connectSuccess;
+      connectStatus.style.color = 'var(--receive)';
+      log(t().logConnEstablished);
+    });
+    conn.on('data', data => handleIncoming(data));
+    conn.on('close', () => {
+      setStatus(false);
+      log(t().logConnClosed);
+    });
+    conn.on('error', err => log(t().logConnError(err)));
+  }
+
+  function handleIncoming(payload){
+    if(!payload || !payload.__beacon) return;
+    if(payload.kind === 'file'){
+      const blob = new Blob([payload.data], {type: payload.mime || 'application/octet-stream'});
+      const url = URL.createObjectURL(blob);
+      recvEmpty.style.display = 'none';
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = '<div class="meta"><div class="fname">'+escapeHtml(payload.name)+'</div>'+
+        '<div class="fsize">'+formatSize(payload.size)+'</div></div>'+
+        '<a class="dl-link" href="'+url+'" download="'+escapeHtml(payload.name)+'">'+t().download+'</a>';
+      recvQueue.prepend(row);
+      log(t().logFileReceived(escapeHtml(payload.name)));
+    } else if(payload.kind === 'text'){
+      recvEmpty.style.display = 'none';
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = '<div class="meta"><div class="fname">'+t().textKind+'</div>'+
+        '<div class="fsize">'+escapeHtml(payload.text).slice(0,80)+'</div></div>';
+      recvQueue.prepend(row);
+      log(t().logTextReceived);
+    }
+  }
+
+  function escapeHtml(s){
+    return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+  function formatSize(bytes){
+    if(bytes < 1024) return bytes + (LANG==='ru' ? ' Б' : ' B');
+    if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + (LANG==='ru' ? ' КБ' : ' KB');
+    return (bytes/1024/1024).toFixed(1) + (LANG==='ru' ? ' МБ' : ' MB');
+  }
+
+  // Tabs
+  const tabs = { tabConnect: 'panelConnect', tabSend: 'panelSend', tabApps: 'panelApps' };
+  function activateTab(tabId){
+    Object.entries(tabs).forEach(([tb, p]) => {
+      $(tb).classList.toggle('active', tb === tabId);
+      $(p).style.display = (tb === tabId) ? 'block' : 'none';
+    });
+  }
+  $('tabConnect').onclick = () => activateTab('tabConnect');
+  $('tabSend').onclick = () => activateTab('tabSend');
+  $('tabApps').onclick = () => activateTab('tabApps');
+
+  // Installed apps (native Android only) — reads apps via the AppExtractor
+  // plugin and sends their APK through the same conn.send() used for files.
+  const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const AppExtractor = isNative ? window.Capacitor.Plugins.AppExtractor : null;
+  const appsQueue = $('appsQueue');
+  const appsHint = $('appsHint');
+  const refreshAppsBtn = $('refreshAppsBtn');
+  let appsLoaded = false;
+  let lastAppsCount = 0;
+
+  function base64ToArrayBuffer(base64){
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  async function loadApps(){
+    appsQueue.innerHTML = '';
+    appsHint.textContent = t().appsLoading;
+    try {
+      const { apps } = await AppExtractor.listApps();
+      appsLoaded = true;
+      lastAppsCount = apps.length;
+      appsHint.textContent = t().appsFound(apps.length);
+      apps.sort((a,b) => a.appName.localeCompare(b.appName));
+      apps.forEach(app => {
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.innerHTML = '<div class="meta"><div class="fname">'+escapeHtml(app.appName)+'</div>'+
+          '<div class="fsize">'+formatSize(app.size)+' · '+escapeHtml(app.packageName)+'</div></div>'+
+          '<button class="btn-ghost" style="padding:8px 12px; font-size:12px;">'+t().appSend+'</button>';
+        const btn = row.querySelector('button');
+        btn.onclick = () => sendApp(app, btn);
+        appsQueue.appendChild(row);
+      });
+    } catch(e){
+      appsHint.textContent = t().appsError;
+      log(t().logAppsListError(e.message));
+    }
+  }
+
+  async function sendApp(app, btn){
+    if(!conn || !conn.open){
+      alert(t().connectFirst);
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = t().sendingBtn;
+    try {
+      const { base64 } = await AppExtractor.getApkBase64({ apkPath: app.apkPath });
+      const data = base64ToArrayBuffer(base64);
+      conn.send({
+        __beacon:true, kind:'file',
+        name: app.appName.replace(/[^a-zA-Zа-яА-Я0-9 _-]/g,'') + '.apk',
+        size: data.byteLength,
+        mime: 'application/vnd.android.package-archive',
+        data
+      });
+      btn.textContent = '✓';
+      log(t().logAppSent(escapeHtml(app.appName)));
+    } catch(e){
+      btn.textContent = t().errBtn;
+      log(t().logAppSendError(escapeHtml(app.appName), e.message));
+    }
+  }
+
+  if(isNative){
+    refreshAppsBtn.style.display = 'block';
+    refreshAppsBtn.onclick = loadApps;
+  }
+
+  // Connect flow
+  $('connectBtn').onclick = () => {
+    const code = peerCodeInput.value.trim().toUpperCase();
+    if(code.length !== 4){
+      state.connectStatusKind = 'needCode';
+      connectStatus.textContent = t().connectNeedCode;
+      connectStatus.style.color = 'var(--alert)';
+      return;
+    }
+    state.connectStatusKind = 'connecting';
+    connectStatus.textContent = t().connectConnecting;
+    connectStatus.style.color = 'var(--ink-soft)';
+    const c = peer.connect('bacon-'+code, {reliable:true});
+    setupConnection(c);
+  };
+
+  // Send flow
+  function queueFiles(files){
+    if(!conn || !conn.open){
+      alert(t().connectFirst);
+      return;
+    }
+    Array.from(files).forEach(file => {
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = '<div class="meta"><div class="fname">'+escapeHtml(file.name)+'</div>'+
+        '<div class="fsize">'+formatSize(file.size)+'</div></div>'+
+        '<div class="signal-pulse"></div>';
+      sendQueue.prepend(row);
+      const pulse = row.querySelector('.signal-pulse');
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        conn.send({
+          __beacon:true, kind:'file',
+          name:file.name, size:file.size, mime:file.type,
+          data: reader.result
+        });
+        pulse.outerHTML = '<div class="check">✓</div>';
+        log(t().logFileSent(escapeHtml(file.name)));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  dropzone.onclick = () => fileInput.click();
+  fileInput.onchange = e => { queueFiles(e.target.files); fileInput.value=''; };
+  ['dragover','dragenter'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => { queueFiles(e.dataTransfer.files); });
+
+  peerCodeInput.addEventListener('input', () => {
+    peerCodeInput.value = peerCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  });
+
+  // ===== Local / serverless mode =====
+  // No signaling server at all: the two devices exchange one short text
+  // blob (SDP + ICE candidates) by hand, then talk directly over the LAN.
+  // Files are sent in manual 16KB base64 chunks over the raw data channel
+  // (unlike the server mode, PeerJS isn't involved here so there's no
+  // built-in chunker — this is exactly the chunking you asked about).
+
+  const modeServerBtn = $('modeServerBtn');
+  const modeLocalBtn = $('modeLocalBtn');
+  const serverModeBox = $('serverModeBox');
+  const localModeBox = $('localModeBox');
+  const localCreateBtn = $('localCreateBtn');
+  const localJoinToggleBtn = $('localJoinToggleBtn');
+  const localCreateBox = $('localCreateBox');
+  const localJoinBox = $('localJoinBox');
+  const localOfferOut = $('localOfferOut');
+  const localAnswerIn = $('localAnswerIn');
+  const localOfferIn = $('localOfferIn');
+  const localAnswerOut = $('localAnswerOut');
+  const localAnswerOutBox = $('localAnswerOutBox');
+  const localFinishBtn = $('localFinishBtn');
+  const localMakeAnswerBtn = $('localMakeAnswerBtn');
+  const copyOfferBtn = $('copyOfferBtn');
+  const copyAnswerBtn = $('copyAnswerBtn');
+  const localStatus = $('localStatus');
+
+  function setMode(mode){
+    modeServerBtn.classList.toggle('mode-btn-active', mode === 'server');
+    modeLocalBtn.classList.toggle('mode-btn-active', mode === 'local');
+    serverModeBox.style.display = mode === 'server' ? 'block' : 'none';
+    localModeBox.style.display = mode === 'local' ? 'block' : 'none';
+  }
+  modeServerBtn.onclick = () => setMode('server');
+  modeLocalBtn.onclick = () => setMode('local');
+  setMode('server');
+
+  function arrayBufferToBase64(buf){
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    const step = 0x8000;
+    for(let i=0;i<bytes.length;i+=step){
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i+step));
+    }
+    return btoa(binary);
+  }
+
+  function waitIceComplete(pc){
+    return new Promise(resolve => {
+      if(pc.iceGatheringState === 'complete') return resolve();
+      const check = () => {
+        if(pc.iceGatheringState === 'complete'){
+          pc.removeEventListener('icegatheringstatechange', check);
+          resolve();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange', check);
+    });
+  }
+
+  // Wraps a raw RTCDataChannel so it exposes the same .send()/.on() shape
+  // as a PeerJS connection — the rest of the app (queueFiles, sendApp,
+  // handleIncoming) doesn't need to know which mode is active.
+  function wrapLocalChannel(channel){
+    const listeners = {};
+    const pending = {};
+    const wrapper = {
+      open: false,
+      on(evt, cb){ listeners[evt] = cb; },
+      send(obj){
+        if(obj.kind === 'file'){
+          const id = 'f'+Date.now()+Math.random().toString(36).slice(2,7);
+          const bytes = new Uint8Array(obj.data);
+          const CHUNK = 16*1024;
+          channel.send(JSON.stringify({__ctrl:'meta', id, name:obj.name, size:obj.size, mime:obj.mime}));
+          let offset = 0;
+          const sendNext = () => {
+            if(offset >= bytes.length){
+              channel.send(JSON.stringify({__ctrl:'end', id}));
+              return;
+            }
+            const slice = bytes.slice(offset, offset+CHUNK);
+            channel.send(JSON.stringify({__ctrl:'chunk', id, data: arrayBufferToBase64(slice.buffer)}));
+            offset += CHUNK;
+            if(channel.bufferedAmount > 1000000){
+              channel.onbufferedamountlow = () => { channel.onbufferedamountlow = null; sendNext(); };
+            } else {
+              setTimeout(sendNext, 0);
+            }
+          };
+          sendNext();
+        } else {
+          channel.send(JSON.stringify({__ctrl:'text', text: obj.text}));
+        }
+      }
+    };
+    channel.bufferedAmountLowThreshold = 262144;
+    channel.onopen = () => { wrapper.open = true; listeners.open && listeners.open(); };
+    channel.onclose = () => { wrapper.open = false; listeners.close && listeners.close(); };
+    channel.onerror = e => { listeners.error && listeners.error(e); };
+    channel.onmessage = ev => {
+      let msg;
+      try{ msg = JSON.parse(ev.data); } catch(e){ return; }
+      if(msg.__ctrl === 'meta'){
+        pending[msg.id] = {name:msg.name, size:msg.size, mime:msg.mime, parts:[]};
+      } else if(msg.__ctrl === 'chunk'){
+        const p = pending[msg.id];
+        if(p) p.parts.push(base64ToArrayBuffer(msg.data));
+      } else if(msg.__ctrl === 'end'){
+        const p = pending[msg.id];
+        if(p){
+          const total = p.parts.reduce((s,a)=>s+a.byteLength,0);
+          const merged = new Uint8Array(total);
+          let off=0;
+          p.parts.forEach(a => { merged.set(new Uint8Array(a), off); off += a.byteLength; });
+          listeners.data && listeners.data({__beacon:true, kind:'file', name:p.name, size:p.size, mime:p.mime, data: merged.buffer});
+          delete pending[msg.id];
+        }
+      } else if(msg.__ctrl === 'text'){
+        listeners.data && listeners.data({__beacon:true, kind:'text', text: msg.text});
+      }
+    };
+    return wrapper;
+  }
+
+  let localPC = null;
+
+  localCreateBtn.onclick = async () => {
+    localCreateBox.style.display = 'block';
+    localJoinBox.style.display = 'none';
+    localStatus.textContent = t().localGathering;
+    localPC = new RTCPeerConnection({iceServers:[]});
+    const channel = localPC.createDataChannel('bacon');
+    const wrapper = wrapLocalChannel(channel);
+    wrapper.on('open', () => {
+      conn = wrapper;
+      setStatus(true);
+      localStatus.textContent = t().localConnected;
+      log(t().logConnEstablished);
+    });
+    const offer = await localPC.createOffer();
+    await localPC.setLocalDescription(offer);
+    await waitIceComplete(localPC);
+    localOfferOut.value = btoa(JSON.stringify(localPC.localDescription));
+    renderQR('localOfferQR', localOfferOut.value);
+    localStatus.textContent = '';
+  };
+
+  localJoinToggleBtn.onclick = () => {
+    localJoinBox.style.display = 'block';
+    localCreateBox.style.display = 'none';
+  };
+
+  localFinishBtn.onclick = async () => {
+    try{
+      const answer = JSON.parse(atob(localAnswerIn.value.trim()));
+      await localPC.setRemoteDescription(answer);
+      localStatus.textContent = t().localConnecting;
+    } catch(e){
+      localStatus.textContent = t().localError;
+    }
+  };
+
+  localMakeAnswerBtn.onclick = async () => {
+    try{
+      const offer = JSON.parse(atob(localOfferIn.value.trim()));
+      localPC = new RTCPeerConnection({iceServers:[]});
+      localPC.ondatachannel = e => {
+        const wrapper = wrapLocalChannel(e.channel);
+        wrapper.on('open', () => {
+          conn = wrapper;
+          setStatus(true);
+          localStatus.textContent = t().localConnected;
+          log(t().logConnEstablished);
+        });
+      };
+      await localPC.setRemoteDescription(offer);
+      const answer = await localPC.createAnswer();
+      await localPC.setLocalDescription(answer);
+      await waitIceComplete(localPC);
+      localAnswerOut.value = btoa(JSON.stringify(localPC.localDescription));
+      renderQR('localAnswerQR', localAnswerOut.value);
+      localAnswerOutBox.style.display = 'block';
+      localStatus.textContent = t().localConnecting;
+    } catch(e){
+      localStatus.textContent = t().localError;
+    }
+  };
+
+  function copyToClipboard(text, btn){
+    const done = () => { const orig = btn.textContent; btn.textContent = t().copiedBtn; setTimeout(()=>{ btn.textContent = orig; }, 1400); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(()=>{});
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); done(); }catch(e){}
+      document.body.removeChild(ta);
+    }
+  }
+  copyOfferBtn.onclick = () => copyToClipboard(localOfferOut.value, copyOfferBtn);
+  copyAnswerBtn.onclick = () => copyToClipboard(localAnswerOut.value, copyAnswerBtn);
+
+  // ===== QR generation =====
+  function renderQR(containerId, text){
+    const el = $(containerId);
+    el.innerHTML = '';
+    if(text.length > 2200){
+      el.innerHTML = '<div class="dial-sub">'+t().qrTooLong+'</div>';
+      return;
+    }
+    try{
+      new QRCode(el, { text, width:200, height:200, correctLevel: QRCode.CorrectLevel.L });
+    } catch(e){
+      el.innerHTML = '<div class="dial-sub">'+t().qrTooLong+'</div>';
+    }
+  }
+
+  // ===== QR scanning via camera =====
+  const scannerOverlay = $('scannerOverlay');
+  const scannerVideo = $('scannerVideo');
+  const scannerCancelBtn = $('scannerCancelBtn');
+  let scannerStream = null;
+  let scannerLoopId = null;
+  let scannerCanvas = document.createElement('canvas');
+
+  async function startScanner(onResult){
+    scannerOverlay.style.display = 'flex';
+    try{
+      scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      scannerVideo.srcObject = scannerStream;
+      await scannerVideo.play();
+      const ctx = scannerCanvas.getContext('2d');
+      const tick = () => {
+        if(!scannerStream) return;
+        try{
+          if(scannerVideo.readyState === scannerVideo.HAVE_ENOUGH_DATA){
+            scannerCanvas.width = scannerVideo.videoWidth;
+            scannerCanvas.height = scannerVideo.videoHeight;
+            ctx.drawImage(scannerVideo, 0, 0, scannerCanvas.width, scannerCanvas.height);
+            const imgData = ctx.getImageData(0, 0, scannerCanvas.width, scannerCanvas.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height);
+            if(code && code.data){
+              stopScanner();
+              onResult(code.data);
+              return;
+            }
+          }
+        } catch(e){
+          log(t().logError('scanner: '+e.message));
+          stopScanner();
+          return;
+        }
+        scannerLoopId = requestAnimationFrame(tick);
+      };
+      scannerLoopId = requestAnimationFrame(tick);
+    } catch(e){
+      stopScanner();
+      log(t().logError('camera: '+e.message));
+    }
+  }
+
+  function stopScanner(){
+    if(scannerLoopId) cancelAnimationFrame(scannerLoopId);
+    scannerLoopId = null;
+    if(scannerStream){
+      scannerStream.getTracks().forEach(tr => tr.stop());
+      scannerStream = null;
+    }
+    scannerOverlay.style.display = 'none';
+  }
+
+  scannerCancelBtn.onclick = stopScanner;
+  $('scanOfferBtn').onclick = () => startScanner(data => { localOfferIn.value = data; });
+  $('scanAnswerBtn').onclick = () => startScanner(data => { localAnswerIn.value = data; });
+
+  applyLanguage();
+  initPeer();
+</script>
+</body>
+</html>
